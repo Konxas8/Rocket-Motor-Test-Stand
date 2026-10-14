@@ -143,6 +143,21 @@ void setup() {
   server.on("/read", handleRead);
   server.on("/fire", handleFire);
 
+  // --- NEW ROUTES TO SERVE SD FILES TO THE JAVASCRIPT PLOTTER ---
+  server.on("/LOG.TXT", HTTP_GET, []() {
+    File f = SD.open("/LOG.TXT");
+    if (!f) { server.send(404, "text/plain", "File not found"); return; }
+    server.streamFile(f, "text/plain");
+    f.close();
+  });
+  
+  server.on("/FIRE_LOG.TXT", HTTP_GET, []() {
+    File f = SD.open("/FIRE_LOG.TXT");
+    if (!f) { server.send(404, "text/plain", "File not found"); return; }
+    server.streamFile(f, "text/plain");
+    f.close();
+  });
+
   // Εκκίνηση HX711
   scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
   scale.set_scale(calibration_factor);
