@@ -114,6 +114,72 @@ const char index_html[] PROGMEM = R"rawliteral(
       xhr.send();
     }
   }, 200);
+
+// Implement Python Data Processing & Plotting in JS
+  async function fetchAndPlot() {
+    try {
+      // 1. Fetch data from ESP32 SD routes
+      const [resLog, resFire] = await Promise.all([
+        fetch('/LOG.TXT').then(r => r.text()),
+        fetch('/FIRE_LOG.TXT').then(r => r.text())
+      ]);
+
+      // 2. Parse LOG.TXT (skip 2 rows)
+      const logLines = resLog.split('\n').slice(2).filter(l => l.includes(','));
+      const logTime = [], logForce = [];
+      logLines.forEach(line => {
+        let pts = line.split(',');
+        logTime.push(parseFloat(pts[0]) / 1000.0);
+        logForce.push(parseFloat(pts[1]));
+      });
+
+      // 3. Parse FIRE_LOG.TXT (skip 1 row) & Find Peak
+      const fireLines = resFire.split('\n').slice(1).filter(l => l.includes(','));
+      const fireTime = [], fireForce = [], fireThrust = [];
+      let peakForce = -999, peakTime = 0;
+      fireLines.forEach(line => {
+        let pts = line.split(',');
+        let t = parseFloat(pts[0]) / 1000.0;
+        let f = parseFloat(pts[1]);
+        fireTime.push(t);
+        fireForce.push(f);
+        fireThrust.push(f * g);
+        if (f > peakForce) { peakForce = f; peakTime = t; }
+      });
+
+      // 4. Render Baseline Plot
+      new Chart(document.getElementById('logChart'), {
+        type: 'line',
+        data: { labels: logTime, datasets: [{ label: 'Tare / Idle Force (kg)', data: logForce, borderColor: '#3498db', borderWidth: 1, pointRadius: 2 }] },
+        options: { plugins: { title: { display: true, text: 'Static Standby / Baseline Telemetry' } }, scales: { x: { title: { display: true, text: 'System Time (s)'} }, y: { title: { display: true, text: 'Force (kg)'} } } }
+      });
+
+      // 5. Render Firing Sequence Plot
+      let peakLabel = `Peak: ${peakForce.toFixed(2)} kg (${(peakForce*g).toFixed(1)} N)`;
+      new Chart(document.getElementById('fireChart'), {
+        type: 'line',
+        data: { 
+          labels: fireTime, 
+          datasets: [
+            { label: 'Measured Force (kg)', data: fireForce, borderColor: '#e74c3c', yAxisID: 'y' },
+            { label: 'Thrust (N)', data: fireThrust, borderColor: 'rgba(0,0,0,0)', yAxisID: 'y1' } // Invisible trace for scaling
+          ] 
+        },
+        options: { 
+          plugins: { 
+            title: { display: true, text: `Ignition Test Thrust Profile | ${peakLabel}` } 
+          },
+          scales: { 
+            x: { title: { display: true, text: 'Burn Time (s)'} }, 
+            y: { title: { display: true, text: 'Force (kg)' }, position: 'left', min: Math.min(...fireForce) },
+            y1: { title: { display: true, text: 'Thrust (N)' }, position: 'right', min: Math.min(...fireThrust) }
+          }
+        }
+      });
+    } catch (err) {
+      alert("Failed to load logs. Ensure SD card has data.");
+    }
+  }
 </script>
 </body>
 </html>
